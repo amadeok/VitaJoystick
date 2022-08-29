@@ -1,0 +1,10 @@
+CORRECT PINOUT:
+VCC 6
+GRN 4
+X   3
+Y   2
+WRONG:
+Pin 2:  X-AXIS
+Pin 3: 3.3V
+Pin 4: GROUND
+Pin 6:  Y-AXIS
