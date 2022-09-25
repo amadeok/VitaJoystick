@@ -3,3 +3,7 @@ wjoystick.py - collegamento.lnk
 test_buttons.py
 test_buttons.py
 test.py
+dist/
+build/
+your_program.spec
+wjoystick.spec
