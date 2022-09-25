@@ -5,6 +5,7 @@ import time
 import msvcrt
 import keyboard, win32gui, win32com, win32com.client, win32con, pyautogui
 pyautogui.PAUSE = 0
+import configparser, os
 
 
 ## DISABLE MIC BUTTON IN VR CHAT SETTINGS
@@ -16,12 +17,6 @@ def callback(hwnd, joystick):
         joystick.vr_chat_handle = hwnd
 
 
-HOST = "192.168.1.91"  # The server's hostname or IP address
-PORT = 3333  # The port used by the server
-max_x = 3220
-max_y = 3000
-min_x = 586
-min_y = 613
 gamepad = vg.VX360Gamepad()
 import threading
 
@@ -31,6 +26,22 @@ def scale(val, src, dst):
 
 
 class wireless_joy():
+
+    def read_conf_file(self):
+        config = configparser.ConfigParser()
+        config.read('settings.ini')
+        self.HOST = config['SETTINGS']["dev board ip address"]
+        FocusVRCHAT = config['SETTINGS']['Focus VRChat window']
+        if (FocusVRCHAT.lower() == "yes" or FocusVRCHAT == "true" or FocusVRCHAT == "1"):
+            self.focus_vrchat_window =  True
+        else: 
+            self.focus_vrchat_window =   False
+        self.max_x = int(config['CALIBRATION']['max_x'])
+        self.max_y = int(config['CALIBRATION']['max_y'])
+        self.min_x = int(config['CALIBRATION']['min_x'])
+        self.min_y = int(config['CALIBRATION']['min_y'])
+        self.pattern_key_press =  config['SETTINGS']['pattern key to press']
+
     def __init__(self) -> None:
         pass
         self.data = bytearray(8)
@@ -42,12 +53,35 @@ class wireless_joy():
         self.milisecondsWindow = 0.5
         self.buttonDelay = 0.0200
         self.extreme_threshold = 0.8
-        thread1 = threading.Thread(target=self.key_lisesnt, args=())
-        thread1.start()
+        #thread1 = threading.Thread(target=self.key_lisesnt, args=())
+        #thread1.start()
         self.vr_chat_handle = 0
+        self.focus_vrchat_window = True
         win32gui.EnumWindows(callback, self)
         shell = win32com.client.Dispatch("WScript.Shell")
         shell.SendKeys('%')
+        self.HOST = "192.168.1.0"  # The server's hostname or IP address
+        self.PORT = 3333  # The port used by the server
+
+        self.max_x = 0
+        self.max_y = 0
+        self.min_x = 0
+        self.min_y = 0
+        self.pattern_key_presss = " "
+
+        if not os.path.isfile("settings.ini"):
+            config = configparser.ConfigParser()
+
+            config['SETTINGS'] = {'Dev Board Ip Address': '192.168.1.91',
+                      'Focus VRChat window': 'true', 'pattern key to press': 'esc',}
+            config['CALIBRATION'] = {'max_x': '3220',
+                      'max_y': '3000', 'min_x': '586', 'min_y': '613'
+                      }
+            with open('settings.ini', 'w') as configfile:
+                config.write(configfile)
+            self.read_conf_file()
+        else:
+            self.read_conf_file()
         
     def key_lisesnt(self):
         while 1:
@@ -63,6 +97,12 @@ class wireless_joy():
                 print("button delay: ", self.buttonDelay)
             if self.buttonDelay < 0: self.buttonDelay = 0
 
+    def focus_vrchat(self):
+        print("\nFocusing VRchat window")
+        rect = win32gui.GetWindowRect(self.vr_chat_handle)
+        win32gui.ShowWindow(self.vr_chat_handle, win32con.SW_MAXIMIZE)
+        pyautogui.click(rect[0] + 30, rect[1] + 30)
+        win32gui.SetForegroundWindow(self.vr_chat_handle)
 
     def patter_detect(self):
         condition = False;
@@ -74,32 +114,25 @@ class wireless_joy():
         else:
             condition = self.joy_x < -self.extreme_threshold; # bottom
 
-  #    for (int n = 0; n < 3; n+=1)
-  #    
-  #      print(self.lastExtremeTimes[n]);
-  #      print(" ");
-  #    print(condition);
-
-        if condition:  #  or self.joy_x < -self.extreme_threshold
+        if condition: 
   
             self.switch_count+=1
 
             if self.joy_x > self.extreme_threshold:
                 self.switcher = 0
-                print(self.switch_count, " high ")
+                print(self.switch_count, "Pattern up ")
 
             elif self.joy_x < -self.extreme_threshold:
                 self.switcher = 1
-                print(self.switch_count, " low ")
+                print(self.switch_count, "Pattern down ")
 
             self.lastExtremeTimes[0] = self.lastExtremeTimes[1];
             self.lastExtremeTimes[1] = self.lastExtremeTimes[2];
             self.lastExtremeTimes[2] = time.time()
             if self.lastExtremeTimes[2] - self.lastExtremeTimes[0] < self.milisecondsWindow  and self.switch_count >= 3:
             
-                print(self.switch_count);
+                print(self.switch_count, " Pattern triggered \n")
 
-                print(" trigger\n");
                 self.switch_count = 0;
                 gamepad.left_joystick_float(1800, 1800) 
                 gamepad.update() 
@@ -111,16 +144,21 @@ class wireless_joy():
                 #gamepad.release_button(button=vg.XUSB_BUTTON.XUSB_GAMEPAD_START)
                 #gamepad.left_joystick_float(1800, 1800) 
                 #gamepad.update() 
-                try:
-                    win32gui.ShowWindow(self.vr_chat_handle, win32con.SW_MAXIMIZE)
-                    win32gui.SetForegroundWindow(self.vr_chat_handle)
-                except Exception as e:
-                    print(e)
-                pyautogui.click(50, 50)
+                if self.focus_vrchat_window:
+                    try:       
+                        self.focus_vrchat()
+                    except Exception as e:
+                        win32gui.EnumWindows(callback, self)
+                        try:
+                            self.focus_vrchat()
+                        except:
+                            print("failed to get vr chat window, is it running?")
+                            #pyautogui.click(50, 50)
 
-                keyboard.press("esc")
+
+                keyboard.press(self.pattern_key_press)
                 sleep(self.buttonDelay);
-                keyboard.release("esc")
+                keyboard.release(self.pattern_key_press)
 
 
         if time.time() - self.lastExtremeTimes[2] >= self.milisecondsWindow:
@@ -143,20 +181,26 @@ class wireless_joy():
                 break
             x = int.from_bytes(self.data[0:4], "little")
             y = int.from_bytes(self.data[4:8], "little")
-            # if x > max_x: max_x = x
-            # if y > max_y: max_y = y
-            # if x < min_x: min_x = x
-            # if y < min_y: min_y = y
+            # if x > self.max_x: self.max_x = x
+            # if y > self.max_y: self.max_y = y
+            # if x < self.min_x: self.min_x = x
+            # if y < self.min_y: self.min_y = y
             # s.send(self.data)
-            self.joy_x = scale(x, (min_x, max_x), (-1.0, +1.0))
 
-            self.joy_y = scale(y, (max_y, min_y), (-1.0, +1.0))
+            self.joy_x = scale(x, (self.min_x, self.max_x), (-1.0, +1.0))
+
+            self.joy_y = scale(y, (self.max_y, self.min_y), (-1.0, +1.0))
             self.patter_detect()
+
+            if self.joy_x < -1: self.joy_x = -1
+            elif self.joy_x > 1: self.joy_x = 1
+            if self.joy_y < -1: self.joy_y = -1
+            elif self.joy_y > 1: self.joy_y = 1
 
             gamepad.left_joystick_float(0, self.joy_y) 
             gamepad.right_joystick_float(self.joy_x, 0) 
-            if n % 10 == 0:
-                gamepad.update() 
+            #if n % 10 == 0:
+            gamepad.update() 
 
             #print(x, y, self.joy_x, self.joy_y, self.data)
             #print(str(self.joy_x)[0:4], str(self.joy_y)[0:4])
@@ -164,12 +208,12 @@ class wireless_joy():
 
 
     def loop(self):
-        print("Creating Socket at IP: ",  HOST, " port: ", PORT)
+        print("Creating Socket at IP: ",  self.HOST, " port: ", self.PORT)
         try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
             print("Connecting to socket..")
 
-            self.s.connect((HOST, PORT))
+            self.s.connect((self.HOST, self.PORT))
 
         except Exception as e:
             print("Creating socket failed, restarting, error: ",  e)
@@ -185,34 +229,3 @@ joy = wireless_joy()
 
 while 1:
     joy.loop()
-
-exit()
-print(f"Received self.data!r")
-from time import sleep
-import pyautogui
-gamepad = vg.VX360Gamepad()
-
-# for x in range(10):
-#     gamepad.press_button(button=vg.XUSB_BUTTON.XUSB_GAMEPAD_A)  # press the A button
-#     gamepad.press_button(button=vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT)  # press the left hat button
-
-#     gamepad.update()  # send the updated state to the computer
-
-#     sleep(1)
-#     gamepad.release_button(button=vg.XUSB_BUTTON.XUSB_GAMEPAD_A)  # release the A button
-
-#     gamepad.update() 
-x_res = 2560
-y_res = 1440
-while 1:
-    sleep(0.01)
-    pos = pyautogui.position()
-    x = (pos.x - x_res/2 ) / (x_res/2)
-    y = (pos.y - y_res/2) / (y_res/2)
-    print(pos, x, y)
-
-
-    gamepad.left_joystick_float(x, y)  # values between -32768 and 32767
-    gamepad.update() 
-   # gamepad.right_joystick(x_value=-32768, y_value=15000)  
-sleep(10)
