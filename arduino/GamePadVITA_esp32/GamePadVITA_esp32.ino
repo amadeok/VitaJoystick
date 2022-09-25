@@ -1,7 +1,7 @@
 
 #include <WiFi.h>
-const char* ssid     = "TIM-18419345";
-const char* password = "yY0QDdiQNM3xUEJnS2XSUzEI";
+const char* ssid     = "wifi_ssid";
+const char* password = "wifi_password";
 /*
  * This is the IP address of your PC
  * [Wins: use ipconfig command, Linux: use ifconfig command]
