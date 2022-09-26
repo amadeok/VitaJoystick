@@ -6,7 +6,8 @@ import msvcrt
 import keyboard, win32gui, win32com, win32com.client, win32con, pyautogui
 pyautogui.PAUSE = 0
 import configparser, os
-
+import threading
+from enum import Enum
 
 ## DISABLE MIC BUTTON IN VR CHAT SETTINGS
 
@@ -18,12 +19,16 @@ def callback(hwnd, joystick):
 
 
 gamepad = vg.VX360Gamepad()
-import threading
 
 
 def scale(val, src, dst):
     return ((val - src[0]) / (src[1]-src[0])) * (dst[1]-dst[0]) + dst[0]
 
+class Map(Enum):
+     left_x = 1
+     left_y = 2
+     right_x = 3
+     right_y = 4
 
 class wireless_joy():
 
@@ -40,13 +45,16 @@ class wireless_joy():
         self.max_y = int(config['CALIBRATION']['max_y'])
         self.min_x = int(config['CALIBRATION']['min_x'])
         self.min_y = int(config['CALIBRATION']['min_y'])
+        self.axis1_mapping = Map[config['SETTINGS']["Axis 1 Mapping"]]
+        self.axis2_mapping = Map[config['SETTINGS']["Axis 2 Mapping"]]
+
         self.pattern_key_press =  config['SETTINGS']['pattern key to press']
 
     def __init__(self) -> None:
         pass
         self.data = bytearray(8)
-        self.joy_x = 1800
-        self.joy_y = 1800
+        self.joy_1 = 1800
+        self.joy_2 = 1800
         self.switch_count = 0
         self.switcher = 0
         self.lastExtremeTimes = [float(0) for x in range(3)]
@@ -68,12 +76,16 @@ class wireless_joy():
         self.min_x = 0
         self.min_y = 0
         self.pattern_key_presss = " "
+        self.axis1_mapping = ""
+        self.axis2_mapping = ""
 
         if not os.path.isfile("settings.ini"):
             config = configparser.ConfigParser()
 
             config['SETTINGS'] = {'Dev Board Ip Address': '192.168.1.91',
-                      'Focus VRChat window': 'true', 'pattern key to press': 'esc',}
+                      'Focus VRChat window': 'true', 'pattern key to press': 'esc',
+                      "Axis 1 Mapping": "right_x", "Axis 2 Mapping": "right_y"
+                      }
             config['CALIBRATION'] = {'max_x': '3220',
                       'max_y': '3000', 'min_x': '586', 'min_y': '613'
                       }
@@ -108,21 +120,21 @@ class wireless_joy():
         condition = False;
 
         if self.switcher == -1:
-            condition = self.joy_x > self.extreme_threshold or  self.joy_x < -self.extreme_threshold;
+            condition = self.joy_1 > self.extreme_threshold or  self.joy_1 < -self.extreme_threshold;
         elif self.switcher:
-            condition = self.joy_x > self.extreme_threshold ; # top
+            condition = self.joy_1 > self.extreme_threshold ; # top
         else:
-            condition = self.joy_x < -self.extreme_threshold; # bottom
+            condition = self.joy_1 < -self.extreme_threshold; # bottom
 
         if condition: 
   
             self.switch_count+=1
 
-            if self.joy_x > self.extreme_threshold:
+            if self.joy_1 > self.extreme_threshold:
                 self.switcher = 0
                 print(self.switch_count, "Pattern up ")
 
-            elif self.joy_x < -self.extreme_threshold:
+            elif self.joy_1 < -self.extreme_threshold:
                 self.switcher = 1
                 print(self.switch_count, "Pattern down ")
 
@@ -187,23 +199,46 @@ class wireless_joy():
             # if y < self.min_y: self.min_y = y
             # s.send(self.data)
 
-            self.joy_x = scale(x, (self.min_x, self.max_x), (-1.0, +1.0))
+            self.joy_1 = scale(x, (self.min_x, self.max_x), (-1.0, +1.0))
 
-            self.joy_y = scale(y, (self.max_y, self.min_y), (-1.0, +1.0))
+            self.joy_2 = scale(y, (self.max_y, self.min_y), (-1.0, +1.0))
             self.patter_detect()
 
-            if self.joy_x < -1: self.joy_x = -1
-            elif self.joy_x > 1: self.joy_x = 1
-            if self.joy_y < -1: self.joy_y = -1
-            elif self.joy_y > 1: self.joy_y = 1
+            if self.joy_1 < -1: self.joy_1 = -1
+            elif self.joy_1 > 1: self.joy_1 = 1
+            if self.joy_2 < -1: self.joy_2 = -1
+            elif self.joy_2 > 1: self.joy_2 = 1
 
-            gamepad.left_joystick_float(0, self.joy_y) 
-            gamepad.right_joystick_float(self.joy_x, 0) 
-            #if n % 10 == 0:
+            final_x = 0
+            final_y = 0
+
+            if self.axis1_mapping == Map.right_x and self.axis2_mapping == Map.right_y:
+                gamepad.right_joystick_float(self.joy_1, self.joy_2) 
+            elif self.axis1_mapping == Map.right_y and self.axis2_mapping == Map.right_x:
+                gamepad.right_joystick_float(self.joy_2, self.joy_1) 
+            elif self.axis1_mapping == Map.left_x and self.axis2_mapping == Map.left_y:
+                gamepad.left_joystick_float(self.joy_1, self.joy_2) 
+            elif self.axis1_mapping == Map.left_y and self.axis2_mapping == Map.left_x:
+                gamepad.left_joystick_float(self.joy_2, self.joy_1) 
+
+            elif self.axis1_mapping == Map.right_x and self.axis2_mapping == Map.left_y:
+                gamepad.right_joystick_float(self.joy_1, 0) 
+                gamepad.left_joystick_float(0, self.joy_2) 
+            elif self.axis1_mapping == Map.right_y and self.axis2_mapping == Map.left_x:
+                gamepad.right_joystick_float(0, self.joy_1) 
+                gamepad.left_joystick_float(self.joy_2, 0) 
+
+            elif self.axis1_mapping == Map.left_x and self.axis2_mapping == Map.right_y:
+                gamepad.left_joystick_float(self.joy_1, 0) 
+                gamepad.right_joystick_float(0, self.joy_2) 
+            elif self.axis1_mapping == Map.left_y and self.axis2_mapping == Map.right_x:
+                gamepad.left_joystick_float(0, self.joy_1) 
+                gamepad.right_joystick_float(self.joy_2, 0) 
+                
             gamepad.update() 
 
-            #print(x, y, self.joy_x, self.joy_y, self.data)
-            #print(str(self.joy_x)[0:4], str(self.joy_y)[0:4])
+            #print(x, y, self.joy_1, self.joy_2, self.data)
+            #print(str(self.joy_1)[0:4], str(self.joy_2)[0:4])
             n+=1
 
 
